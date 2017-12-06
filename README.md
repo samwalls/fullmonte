@@ -11,9 +11,9 @@ Since MCTS is sometimes cited as an _embarassingly parallelisable_ algorithm, I 
 - [ ] optimization for general-case MCTS
 - [ ] basic documentation
 - [ ] concurrent multi-threaded MCTS
-- [ ] _worker-based_ concurrent models for
-      - [ ] leaf parallelisation
-      - [ ] root parallelisation
-      - [ ] tree parallelisation
+- [ ] a _worker-based_ concurrency model
+  - [ ] leaf parallelisation
+  - [ ] root parallelisation
+  - [ ] tree parallelisation
 - [ ] network worker support
 - [ ] other base MCTS implementations (such as RAVE)
