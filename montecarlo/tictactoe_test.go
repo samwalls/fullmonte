@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"gitlab.com/jac32/Settlers-of-Catan/game/montecarlo"
+	"github.com/samwalls/fullmonte/montecarlo"
 )
 
 type cell int8
