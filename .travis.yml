@@ -1,0 +1,7 @@
+language: go
+notifications:
+  email: false
+script:
+  - curl https://glide.sh/get | sh
+  - glide install
+  - go test -v $(glide novendor)
