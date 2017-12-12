@@ -17,3 +17,21 @@ Since MCTS is sometimes cited as an _embarassingly parallelisable_ algorithm, I 
   - [ ] tree parallelisation
 - [ ] network worker support
 - [ ] other base MCTS implementations (such as RAVE)
+
+## Installing Dependencies and Running Tests
+
+This project uses [glide](http://glide.sh/) for golang dependency management. This makes it very easy to fetch dependencies (as defined in glide.yaml) for the project. Glide is also very easy to install, check their website for more.
+
+To download dependencies use the following:
+
+```
+glide install
+```
+
+This will download dependencies into a directory called `vendor`.
+
+In order to run tests on the whole project without running tests for installed dependencies, use the following:
+
+```
+go test -v $(glide novendor)
+```
