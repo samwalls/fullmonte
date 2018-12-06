@@ -1,6 +1,12 @@
 # Full Monte
 
-###### Master Build Status [![Build Status](https://travis-ci.org/samwalls/fullmonte.svg?branch=master)](https://travis-ci.org/samwalls/fullmonte)
+###### Master Branch
+
+[![Build Status](https://travis-ci.org/samwalls/fullmonte.svg?branch=master)](https://travis-ci.org/samwalls/fullmonte)
+
+###### Develop Branch
+
+[![Build Status](https://api.travis-ci.org/samwalls/fullmonte.svg?branch=develop)](https://travis-ci.org/samwalls/fullmonte)
 
 _Full Monte_ is a collection of libraries to help implement [MCTS](https://en.wikipedia.org/wiki/Monte_Carlo_tree_search) for the general case! Proper documentation will come as features are completed and optimized.
 
