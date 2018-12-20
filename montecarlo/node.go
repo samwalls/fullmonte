@@ -56,11 +56,11 @@ func (node Node) String() string {
 	return out
 }
 
-// Copy returns a deep copy of this node
-func (node Node) Copy() *Node {
+// Copy returns a deep copy of this node (ignoring the parent).
+func (node *Node) Copy() *Node {
 	// will not throw any error since we're already using a valid player count
 	cpy, _ := NewNode(node.NumPlayers())
-	cpy.children = make(map[Key]*Node)
+	cpy.policy = node.policy
 	// add the nodes of this tree into the copy
 	// will not throw an error since the player counts are the same
 	_ = cpy.Merge(node)
@@ -70,7 +70,7 @@ func (node Node) Copy() *Node {
 // Merge two nodes and all their children: add all nodes from other into this
 // node's tree of children. If both trees have the same node, then their Score
 // and Visit values are added.
-func (node *Node) Merge(other Node) error {
+func (node *Node) Merge(other *Node) error {
 	//TODO make a version of Merge that does not create side-effects
 	// check for any errors that mean the node cannot be merged
 	err := node.mergeGetErrors(other)
@@ -94,18 +94,19 @@ func (node *Node) Merge(other Node) error {
 		}
 		if _, ok := node.children[k]; !ok {
 			// if a child with that key does not exist on this node, make it
+			// TODO: this Copy() may be creating a lot of redundant work
 			otherCopy := otherChild.Copy()
 			// copies work from the node down (parent is culled out)
 			node.SetChild(k, otherCopy)
 		} else {
-			node.GetChild(k).Merge(*otherChild)
+			node.GetChild(k).Merge(otherChild)
 		}
 	}
 	return nil
 }
 
 // Generates any errors associated with merging with the node "other".
-func (node *Node) mergeGetErrors(other Node) error {
+func (node *Node) mergeGetErrors(other *Node) error {
 	// player count needs to be consistent
 	if other.NumPlayers() != node.NumPlayers() {
 		return MergeDifferingPlayerCount{

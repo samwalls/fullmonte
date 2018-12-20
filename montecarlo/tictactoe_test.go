@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"runtime"
 	"testing"
 	"time"
 
@@ -272,7 +273,7 @@ func (state gameState) readValidChoice() (int, int) {
 }
 
 // runs an example match between montecarlo AIs.
-func TestExample(t *testing.T) {
+func TestExampleSearch(t *testing.T) {
 	makeActions()
 	state := initState()
 	//coin flip to determine who goes first; Xs or Os
@@ -309,6 +310,69 @@ func TestExample(t *testing.T) {
 				panic(fmt.Sprintf("%v", err))
 			}
 			index, action, err := ai.Search(1000, float64(1)/math.Sqrt2)
+			if err != nil {
+				panic(fmt.Sprintf("%v", err))
+			}
+			fmt.Printf("O: \"taking action: %v\"\n", index)
+			state = ((*action)(state)).(gameState)
+		}
+		fmt.Printf("%v", state)
+	}
+	if winner == playerX {
+		fmt.Println("Xs win")
+	} else if winner == playerO {
+		fmt.Println("Os win")
+	} else {
+		fmt.Println("draw")
+	}
+}
+
+// runs an example match between root-parallelised montecarlo AIs.
+func TestExampleRootParallelSearch(t *testing.T) {
+	makeActions()
+	state := initState()
+	//coin flip to determine who goes first; Xs or Os
+	rand.Seed(time.Now().UTC().UnixNano())
+	flip := rand.Intn(2)
+	if flip == 0 {
+		state.turn = !state.turn
+	}
+	//play the game
+	var end bool
+	var winner cell
+	for end, winner = state.isEnd(); !end; end, winner = state.isEnd() {
+		if state.turn {
+			/*
+				x, y := state.readValidChoice()
+				state.board[x][y] = playerX
+				state.turn = !state.turn
+			*/
+			fmt.Println("X's turn...")
+			ai, err := montecarlo.NewMultiplayerMCTS(2, state, actions)
+			if err != nil {
+				panic(fmt.Sprintf("%v", err))
+			}
+			index, action, err := ai.RootParallelSearch(
+				runtime.NumCPU(),
+				1000,
+				float64(1)/math.Sqrt2,
+			)
+			if err != nil {
+				panic(fmt.Sprintf("%v", err))
+			}
+			fmt.Printf("X: \"taking action: %v\"\n", index)
+			state = ((*action)(state)).(gameState)
+		} else {
+			fmt.Println("O's turn...")
+			ai, err := montecarlo.NewMultiplayerMCTS(2, state, actions)
+			if err != nil {
+				panic(fmt.Sprintf("%v", err))
+			}
+			index, action, err := ai.RootParallelSearch(
+				runtime.NumCPU(),
+				1000,
+				float64(1)/math.Sqrt2,
+			)
 			if err != nil {
 				panic(fmt.Sprintf("%v", err))
 			}
