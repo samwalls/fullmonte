@@ -16,9 +16,9 @@ Since MCTS is sometimes cited as an _embarassingly parallelisable_ algorithm, I 
 
 - [x] interfaces to define abstract MCTS implementations
 - [x] single-threaded MCTS
+- [x] concurrent multi-threaded MCTS (root-parallel model implemented)
 - [ ] optimization for general-case MCTS
 - [ ] basic documentation
-- [ ] concurrent multi-threaded MCTS
 - [ ] a _worker-based_ concurrency model
   - [ ] leaf parallelisation
   - [ ] root parallelisation
