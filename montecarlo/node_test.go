@@ -343,10 +343,30 @@ func TestNodeMergeDifferingPlayerCount(t *testing.T) {
 	assert.True(t, ok, "expected MergeDifferingPlayercount error when merging")
 }
 
+func TestNodeMergePlayerIndexMismatch(t *testing.T) {
+	nodeTestSetup()
+	nodeWithGrandchildren.State = simpleStateImplementation{
+		triggerPlayerIndexError: false,
+	}
+	node, err := NewNode(1)
+	node.State = simpleStateImplementation{
+		triggerPlayerIndexError: true,
+	}
+	if err != nil {
+		assert.Fail(t, err.Error())
+	}
+	err = nodeWithGrandchildren.Merge(node)
+	assert.NotNil(t, err, "expected error when merging")
+	var ok bool
+	err, ok = err.(MergePlayerIndexMismatch)
+	assert.True(t, ok, "expected error to be of type MergePlayerIndexMismatch")
+}
+
 // very simple state implementation to test with all nodes using this state will
 // be exhausted and terminal
 type simpleStateImplementation struct {
-	internal int
+	internal                int
+	triggerPlayerIndexError bool
 }
 
 func (ssi simpleStateImplementation) LegalActions() ActionSet {
@@ -366,25 +386,14 @@ func (ssi simpleStateImplementation) Copy() State {
 }
 
 func (ssi simpleStateImplementation) Player() uint {
+	if ssi.triggerPlayerIndexError {
+		return 1
+	}
 	return 0
 }
 
 func (ssi simpleStateImplementation) Policy() Policy {
 	return nil
-}
-
-func TestNodeMergeStateMismatch(t *testing.T) {
-	nodeTestSetup()
-	node, err := NewNode(1)
-	if err != nil {
-		assert.Fail(t, err.Error())
-	}
-	node.State = simpleStateImplementation{3}
-	err = nodeWithGrandchildren.Merge(node)
-	assert.NotNil(t, err, "expected MergeStateMismatch error when merging")
-	var ok bool
-	err, ok = err.(MergeStateMismatch)
-	assert.True(t, ok, "expected MergeStateMismatch error when merging")
 }
 
 func TestNodeIsTerminal(t *testing.T) {
