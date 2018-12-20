@@ -1,6 +1,9 @@
 package montecarlo
 
-import "sync"
+import (
+	"fmt"
+	"sync"
+)
 
 // ActionSet is a map from string to action
 type ActionSet map[Key]Action
@@ -32,7 +35,7 @@ type State interface {
 	Policy() Policy
 }
 
-/*-------- TreeSearcher DEFAULT IMPLEMENTATION --------*/
+/*-------- MONTECARLO TREE SEARCH IMPLEMENTATIONS --------*/
 
 // MultiplayerMCTS encapsulates the information required for a basic MCTS
 // implementation, including: its search tree; and its policy for operating on
@@ -57,31 +60,11 @@ func NewMultiplayerMCTS(numPlayers uint, init State, actions map[Key]Action) (Mu
 func (mcts MultiplayerMCTS) Search(level int64, expl float64) (Key, *Action, error) {
 	for i := int64(0); i < level; i++ {
 		root := mcts.tree.Root()
-		node := root.Policy().Select(&root, expl)
+		node := root.Policy().Select(root, expl)
 		node.Policy().Backpropagate(node, node.Policy().Simulate(node))
 		//log.Infof("finished %vth simulation", i)
 	}
-	/*
-		// debugging output
-		for k, c := range mcts.tree.Root().children {
-			fmt.Printf("{%v: %v/%v | current player: %v | UCB %v}\n",
-				k,
-				c.ScoreVector(),
-				c.Visits(),
-				c.Player(),
-				c.UpperConfidenceBound(expl, c.Player()),
-			)
-			for k2, c2 := range c.children {
-				fmt.Printf("\t{ %v: %v/%v | current player: %v | UCB %v}\n",
-					k2,
-					c2.ScoreVector(),
-					c2.Visits(),
-					c2.Player(),
-					c2.UpperConfidenceBound(expl, c2.Player()),
-				)
-			}
-		}
-	*/
+	//mcts.printDebugOutput(expl)
 	// maximise exploitation over exploration by setting the exploration parameter
 	// to 0
 	key, _ := mcts.tree.root.selectBestChild(0)
@@ -98,28 +81,56 @@ func (mcts MultiplayerMCTS) RootParallelSearch(numThreads int, level int64, expl
 	trees := make(chan *Tree, numThreads)
 	var counter sync.WaitGroup
 	counter.Add(numThreads)
+	// start processing a copy of the root on each thread
 	for threadno := 0; threadno < numThreads; threadno++ {
-		go func() {
-			defer counter.Done()
-			// create a separate copy of the initial tree for this thread
-			tree := mcts.tree.Copy()
+		// create a separate copy of the initial tree for each thread
+		//tree, _ := NewTree(mcts.tree.Root().NumPlayers(), mcts.tree.Root().State.Copy(), mcts.tree.Root().State.LegalActions())
+		tree := mcts.tree.Copy()
+		go func(threadno int, tree *Tree) {
 			for i := int64(0); i < level; i++ {
 				root := tree.Root()
-				node := root.Policy().Select(&root, expl)
+				node := root.Policy().Select(root, expl)
 				node.Policy().Backpropagate(node, node.Policy().Simulate(node))
 			}
+			// this tree will get merged with the base tree synchronously
 			trees <- tree
-		}()
+		}(threadno, tree)
 	}
-	// merge all created trees
 	go func() {
-		for t := range trees {
-			mcts.tree.Merge(*t)
-		}
+		// close the channel when all trees are processed
+		counter.Wait()
+		close(trees)
 	}()
-	// wait for all searches to finish
-	counter.Wait()
+	// merge all created trees as they arrive in the channel (synchronously)
+	for t := range trees {
+		// TODO: investigate asynchronous map read/write implementations
+		// TODO: may provide benefit for sufficiently large trees
+		mcts.tree.Merge(t)
+		counter.Done()
+	}
 	key, _ := mcts.tree.root.selectBestChild(0)
 	action := mcts.tree.PossibleActions()[key]
 	return key, &action, nil
+}
+
+func (mcts MultiplayerMCTS) printDebugOutput(expl float64) {
+	// debugging output
+	for k, c := range mcts.tree.Root().children {
+		fmt.Printf("{%v: %v/%v | current player: %v | UCB %v}\n",
+			k,
+			c.ScoreVector(),
+			c.Visits(),
+			c.Player(),
+			c.UpperConfidenceBound(expl, c.Player()),
+		)
+		for k2, c2 := range c.children {
+			fmt.Printf("\t{ %v: %v/%v | current player: %v | UCB %v}\n",
+				k2,
+				c2.ScoreVector(),
+				c2.Visits(),
+				c2.Player(),
+				c2.UpperConfidenceBound(expl, c2.Player()),
+			)
+		}
+	}
 }

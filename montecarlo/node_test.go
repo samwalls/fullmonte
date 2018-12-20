@@ -304,11 +304,17 @@ func TestNodeCopy(t *testing.T) {
 		assert.True(t, ok)
 		assert.NotEqual(t, &c, cpyChild)
 		assert.Equal(t, c.State, cpyChild.State)
+		assert.Equal(t, c.Parent(), &nodeWithGrandchildren)
+		assert.Equal(t, cpyChild.Parent(), cpy)
 		for k2, c2 := range c.children {
-			cpyChild, ok := cpy.children[k].children[k2]
+			cpyGrandchild, ok := cpy.children[k].children[k2]
 			assert.True(t, ok)
-			assert.NotEqual(t, &c2, cpyChild)
-			assert.Equal(t, c2.State, cpyChild.State)
+			assert.NotEqual(t, &c2, cpyGrandchild)
+			assert.Equal(t, c2.Parent(), c)
+			assert.Equal(t, cpyGrandchild.Parent(), cpyChild)
+			assert.Equal(t, c2.State, cpyGrandchild.State)
+			assert.Equal(t, c2.Parent().Parent(), &nodeWithGrandchildren)
+			assert.Equal(t, cpyGrandchild.Parent().Parent(), cpy)
 		}
 	}
 }
@@ -316,7 +322,7 @@ func TestNodeCopy(t *testing.T) {
 func TestNodeMergeWithSelf(t *testing.T) {
 	nodeTestSetup()
 	cpy := nodeWithGrandchildren.Copy()
-	err := nodeWithGrandchildren.Merge(*cpy)
+	err := nodeWithGrandchildren.Merge(cpy)
 	if err != nil {
 		assert.Fail(t, err.Error())
 	}
@@ -328,6 +334,12 @@ func TestNodeMergeWithSelf(t *testing.T) {
 		assert.Equal(t, v*2, s[i])
 	}
 	assert.Equal(t, len(cpy.children), len(nodeWithGrandchildren.children))
+	for k, c := range cpy.children {
+		assert.Equal(t, c.Parent(), cpy)
+		originalChild, ok := nodeWithGrandchildren.children[k]
+		assert.True(t, ok, "expected child nodes to be the same when merging with self")
+		assert.Equal(t, originalChild.Parent(), &nodeWithGrandchildren)
+	}
 }
 
 func TestNodeMergeDifferingPlayerCount(t *testing.T) {
@@ -336,17 +348,37 @@ func TestNodeMergeDifferingPlayerCount(t *testing.T) {
 	if err != nil {
 		assert.Fail(t, err.Error())
 	}
-	err = nodeWithGrandchildren.Merge(node)
+	err = nodeWithGrandchildren.Merge(&node)
 	assert.NotNil(t, err, "expected MergeDifferingPlayercount error when merging")
 	var ok bool
 	err, ok = err.(MergeDifferingPlayerCount)
 	assert.True(t, ok, "expected MergeDifferingPlayercount error when merging")
 }
 
+func TestNodeMergePlayerIndexMismatch(t *testing.T) {
+	nodeTestSetup()
+	nodeWithGrandchildren.State = simpleStateImplementation{
+		triggerPlayerIndexError: false,
+	}
+	node, err := NewNode(1)
+	node.State = simpleStateImplementation{
+		triggerPlayerIndexError: true,
+	}
+	if err != nil {
+		assert.Fail(t, err.Error())
+	}
+	err = nodeWithGrandchildren.Merge(&node)
+	assert.NotNil(t, err, "expected error when merging")
+	var ok bool
+	err, ok = err.(MergePlayerIndexMismatch)
+	assert.True(t, ok, "expected error to be of type MergePlayerIndexMismatch")
+}
+
 // very simple state implementation to test with all nodes using this state will
 // be exhausted and terminal
 type simpleStateImplementation struct {
-	internal int
+	internal                int
+	triggerPlayerIndexError bool
 }
 
 func (ssi simpleStateImplementation) LegalActions() ActionSet {
@@ -366,25 +398,14 @@ func (ssi simpleStateImplementation) Copy() State {
 }
 
 func (ssi simpleStateImplementation) Player() uint {
+	if ssi.triggerPlayerIndexError {
+		return 1
+	}
 	return 0
 }
 
 func (ssi simpleStateImplementation) Policy() Policy {
 	return nil
-}
-
-func TestNodeMergeStateMismatch(t *testing.T) {
-	nodeTestSetup()
-	node, err := NewNode(1)
-	if err != nil {
-		assert.Fail(t, err.Error())
-	}
-	node.State = simpleStateImplementation{3}
-	err = nodeWithGrandchildren.Merge(node)
-	assert.NotNil(t, err, "expected MergeStateMismatch error when merging")
-	var ok bool
-	err, ok = err.(MergeStateMismatch)
-	assert.True(t, ok, "expected MergeStateMismatch error when merging")
 }
 
 func TestNodeIsTerminal(t *testing.T) {
@@ -400,4 +421,43 @@ func TestNodeWithStateIsExhausted(t *testing.T) {
 	assert.True(t, nodeWithChildren.IsExhausted())
 	nodeWithGrandchildren.State = simpleStateImplementation{}
 	assert.True(t, nodeWithGrandchildren.IsExhausted())
+}
+
+func TestNodeBackpropagateScoreCoherency(t *testing.T) {
+	nodeTestSetup()
+	for _, c := range nodeWithGrandchildren.children {
+		c.SetScore(0, float64(0))
+		assert.Equal(t, c.Score(0), float64(0))
+		for _, c2 := range c.children {
+			c2.SetScore(0, float64(0))
+			assert.Equal(t, c2.Score(0), float64(0))
+			c2.Policy().Backpropagate(c2, float64(1))
+			assert.Equal(t, c2.Score(0), float64(1))
+		}
+		assert.Equal(t, c.Score(0), float64(len(c.children)))
+	}
+	assert.True(t, nodeWithGrandchildren.Score(0) > 0, "expected root node score to be non-zero after backpropagating")
+}
+
+func TestNodeCopyBackpropagateScoreCoherency(t *testing.T) {
+	nodeTestSetup()
+	// set up the score in the tree how we'd like it
+	for _, c := range nodeWithGrandchildren.children {
+		c.SetScore(0, float64(0))
+		for _, c2 := range c.children {
+			c2.SetScore(0, float64(0))
+			c2.Policy().Backpropagate(c2, float64(1))
+		}
+	}
+	// create a copy
+	cpy := nodeWithGrandchildren.Copy()
+	// test values on the copy
+	for _, c := range cpy.children {
+		assert.Equal(t, c.Score(0), float64(10))
+		for _, c2 := range c.children {
+			assert.Equal(t, c2.Score(0), float64(1))
+		}
+	}
+	assert.True(t, cpy.Score(0) > 0, "expected copied root node score to be non-zero")
+	assert.Equal(t, cpy.Score(0), nodeWithGrandchildren.Score(0))
 }

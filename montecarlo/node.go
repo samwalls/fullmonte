@@ -56,11 +56,11 @@ func (node Node) String() string {
 	return out
 }
 
-// Copy returns a deep copy of this node
-func (node Node) Copy() *Node {
+// Copy returns a deep copy of this node (ignoring the parent).
+func (node *Node) Copy() *Node {
 	// will not throw any error since we're already using a valid player count
 	cpy, _ := NewNode(node.NumPlayers())
-	cpy.children = make(map[Key]*Node)
+	cpy.policy = node.policy
 	// add the nodes of this tree into the copy
 	// will not throw an error since the player counts are the same
 	_ = cpy.Merge(node)
@@ -70,55 +70,65 @@ func (node Node) Copy() *Node {
 // Merge two nodes and all their children: add all nodes from other into this
 // node's tree of children. If both trees have the same node, then their Score
 // and Visit values are added.
-func (node *Node) Merge(other Node) error {
+func (node *Node) Merge(other *Node) error {
 	//TODO make a version of Merge that does not create side-effects
-	players := node.NumPlayers()
-	// check for incompatibility
-	if other.NumPlayers() != players {
-		return MergeDifferingPlayerCount{
-			players,
-			other.NumPlayers(),
-		}
+	// check for any errors that mean the node cannot be merged
+	err := node.mergeGetErrors(other)
+	if err != nil {
+		return err
 	}
-	if node.State != nil && other.State != nil && node.Player() != other.Player() {
-		return MergePlayerIndexMismatch{
-			node.Player(),
-			other.Player(),
-		}
-	}
-	if node.State != other.State {
-		return MergeStateMismatch{
-			node.State,
-			other.State,
-		}
-	}
-	// add the other node's values to this node
-	for i := uint(0); i < players; i++ {
+	// add/merge node values
+	for i := uint(0); i < node.NumPlayers(); i++ {
 		node.score[i] += other.score[i]
 	}
 	node.visits += other.Visits()
-	if other.State != nil {
+	if node.State == nil && other.State != nil {
 		node.State = other.State.Copy()
 	}
-	// add children
+	// Add child nodes from other to this node.
+	// If this node doesn't contain a child from other, it is copied.
+	// All nodes in common are recursively merged (depth-first).
 	for k, otherChild := range other.children {
 		if otherChild == nil {
 			continue
 		}
 		if _, ok := node.children[k]; !ok {
 			// if a child with that key does not exist on this node, make it
-			n, err := NewNode(players)
-			if err != nil {
-				// this really shouldn't happen
-				return err
-			}
-			node.SetChild(k, &n)
-		}
-		// recurse, merging children
-		if otherChild != nil {
-			node.GetChild(k).Merge(*otherChild)
+			// TODO: this Copy() may be creating a lot of redundant work
+			otherCopy := otherChild.Copy()
+			// copies work from the node down (parent is culled out)
+			node.SetChild(k, otherCopy)
+		} else {
+			node.GetChild(k).Merge(otherChild)
 		}
 	}
+	return nil
+}
+
+// Generates any errors associated with merging with the node "other".
+func (node *Node) mergeGetErrors(other *Node) error {
+	// player count needs to be consistent
+	if other.NumPlayers() != node.NumPlayers() {
+		return MergeDifferingPlayerCount{
+			node.NumPlayers(),
+			other.NumPlayers(),
+		}
+	}
+	// player at this state needs to be consistent
+	if node.State != nil && other.State != nil && node.Player() != other.Player() {
+		return MergePlayerIndexMismatch{
+			node.Player(),
+			other.Player(),
+		}
+	}
+	// state needs to be consistent (if the first two errors do not
+	// adequately capture this already)
+	//if node.State != other.State {
+	//	return MergeStateMismatch{
+	//		node.State,
+	//		other.State,
+	//	}
+	//}
 	return nil
 }
 
