@@ -86,15 +86,12 @@ func (mcts MultiplayerMCTS) RootParallelSearch(numThreads int, level int64, expl
 		// create a separate copy of the initial tree for each thread
 		//tree, _ := NewTree(mcts.tree.Root().NumPlayers(), mcts.tree.Root().State.Copy(), mcts.tree.Root().State.LegalActions())
 		tree := mcts.tree.Copy()
-		fmt.Printf("created tree copy %p \n", tree)
 		go func(threadno int, tree *Tree) {
-			fmt.Printf("starting MCTS for tree %p on thread %v\n", tree, threadno)
 			for i := int64(0); i < level; i++ {
 				root := tree.Root()
 				node := root.Policy().Select(root, expl)
 				node.Policy().Backpropagate(node, node.Policy().Simulate(node))
 			}
-			fmt.Printf("finished MCTS for thread %v\n", threadno)
 			// this tree will get merged with the base tree synchronously
 			trees <- tree
 		}(threadno, tree)
@@ -105,9 +102,7 @@ func (mcts MultiplayerMCTS) RootParallelSearch(numThreads int, level int64, expl
 		close(trees)
 	}()
 	// merge all created trees as they arrive in the channel (synchronously)
-	fmt.Printf("waiting for trees to process\n")
 	for t := range trees {
-		fmt.Printf("got finished tree to process\n")
 		// TODO: investigate asynchronous map read/write implementations
 		// TODO: may provide benefit for sufficiently large trees
 		mcts.tree.Merge(t)
